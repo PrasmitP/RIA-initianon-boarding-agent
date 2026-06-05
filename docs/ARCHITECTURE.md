@@ -13,7 +13,7 @@ it works.
 - [Client-side PDF generation](#client-side-pdf-generation)
 - [Key decisions & trade-offs](#key-decisions--trade-offs)
 - [Testing](#testing)
-- [Running the backend yourself](#running-the-backend-yourself)
+- [Deployment](#deployment)
 - [Known limitations](#known-limitations)
 
 ---
@@ -25,8 +25,7 @@ Two deployable units:
 1. **Frontend** — a React/Vite single-page app. Pure client-side; it holds no
    secrets. Responsible for intake, deterministic risk scoring, rendering
    generated documents, and exporting PDFs.
-2. **Backend** — a single Supabase **Edge Function** (Deno runtime) that holds
-   the Anthropic API key and orchestrates document generation.
+2. **Backend** — a single Supabase **Edge Function** (Deno runtime) that holds the Anthropic API key and orchestrates document generation.
 
 ```mermaid
 flowchart LR
@@ -203,31 +202,100 @@ To make this possible, `renderMarkdownToDoc(markdown, existingDoc?)` accepts an
 optional pre-built document, so a test can inject an instrumented instance — a
 small seam that keeps the layout logic verifiable without a browser.
 
-## Running the backend yourself
+## Deployment
 
-The function lives in `supabase/functions/make-server-45e67790/`. To deploy your
-own copy:
+The two pieces deploy independently, deliberately split so the API key never
+reaches the client:
+
+| Piece | Platform | Holds secrets? |
+|---|---|---|
+| **Frontend** (React/Vite SPA) | **Vercel** (static) | ❌ No — needs no env vars |
+| **Backend** (edge function) | **Supabase** (Deno) | ✅ Yes — the `ANTHROPIC_API_KEY` |
+
+A UI change redeploys only the frontend; a prompt/model change redeploys only the
+function. They never need to ship together.
+
+### Backend — Supabase Edge Function
+
+The function lives in `supabase/functions/make-server-45e67790/`. From the project
+root:
 
 ```bash
-# one-time
+# one-time auth + link
 npx supabase login
 npx supabase link --project-ref <your-project-ref>
 
-# set the secret (never commit this)
+# store the Anthropic key as an encrypted server-side secret (never commit this)
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 
 # deploy
-npx supabase functions deploy make-server-45e67790
+npx supabase functions deploy make-server-45e67790 --project-ref <your-project-ref>
 ```
 
-Then point the frontend at your project by setting `projectId` and
-`publicAnonKey` in [`utils/supabase/info.tsx`](../utils/supabase/info.tsx).
-Verify with the health endpoint:
+`<your-project-ref>` is in your dashboard URL:
+`https://supabase.com/dashboard/project/<your-project-ref>`. Point the frontend at
+it by setting `projectId` and `publicAnonKey` in
+[`utils/supabase/info.tsx`](../utils/supabase/info.tsx) (the anon key is a public
+client key — safe to commit). Verify:
 
 ```bash
-curl https://<ref>.supabase.co/functions/v1/make-server-45e67790/health
+curl https://<your-project-ref>.supabase.co/functions/v1/make-server-45e67790/health
 # → {"status":"ok"}
 ```
+
+### Frontend — Vercel
+
+```bash
+npm run build         # sanity-check the build Vercel will run (produces dist/)
+
+npx vercel login
+npx vercel            # creates a new project + preview deploy
+npx vercel --prod     # promote to production, e.g. https://xylo-ria.vercel.app
+```
+
+Accept Vercel's auto-detected **Vite** settings (Build `npm run build`, Output
+`dist`, Root `./`) and **leave Environment Variables empty** — the frontend holds
+no secrets. The preview works immediately because it calls the already-deployed
+Supabase function.
+
+> _Alternative:_ connect a GitHub repo via **Add New… → Project** for automatic
+> deploys on every push (preview URLs for PRs, production on merge to main).
+
+### Security hardening
+
+The key is safe (server-side only); the remaining concern is **abuse of the open
+endpoint** (its URL is in the public bundle, and it runs with `verify_jwt = false`
++ `origin: "*"`, so anyone could call it and burn Anthropic credits). In order of
+importance:
+
+1. **Never set the Anthropic key as a Vercel env var** — anything in a Vite build
+   is public; it belongs only in Supabase secrets.
+2. **Set an Anthropic spend limit** ([console.anthropic.com](https://console.anthropic.com)
+   → Billing → Usage limits) — caps worst-case cost no matter what.
+3. **Lock CORS to your domain** — change `origin: "*"` in the function's `cors()`
+   call to `["https://<your-app>.vercel.app", "http://localhost:5173"]`, then
+   redeploy the function. (Stops other sites' browsers; full closure needs user
+   auth — a roadmap item.)
+4. **Keep secrets out of git** — handled by [`.gitignore`](../.gitignore)
+   (`.env*`, `supabase/.temp/`, `.vercel`).
+
+### Updating a live deployment
+
+| You changed… | Redeploy with |
+|---|---|
+| Frontend code (UI / PDF) | `npx vercel --prod` (or `git push` if GitHub-connected) |
+| Backend code (prompts / model / CORS) | `npx supabase functions deploy make-server-45e67790 --project-ref <ref>` |
+| The Anthropic key | `npx supabase secrets set ANTHROPIC_API_KEY=...` (no redeploy needed) |
+
+### Troubleshooting
+
+| Symptom | Cause / Fix |
+|---|---|
+| `Failed to fetch` / CORS error on Generate | Function not deployed, or CORS origin excludes your domain. Redeploy the function; check the health endpoint. |
+| `401 invalid x-api-key` | The `ANTHROPIC_API_KEY` secret is wrong/unset. Re-run `supabase secrets set`. |
+| `Cannot find project ref` during deploy | Run from the project root, or pass `--project-ref <ref>`. |
+| Vercel build uses pnpm and fails | Ensure no `pnpm-workspace.yaml` exists so Vercel uses npm via `package-lock.json`. |
+| Docs generate but look unformatted | Frontend not rebuilt/redeployed — push the latest with `npx vercel --prod`. |
 
 ## Known limitations
 

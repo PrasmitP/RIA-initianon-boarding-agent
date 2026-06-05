@@ -14,9 +14,16 @@ interface ResultsViewProps {
   onStartOver: () => void;
 }
 
+/**
+ * The post-generation screen. The four documents arrive as Markdown strings;
+ * this view lets the advisor switch between them (sidebar), renders the selected
+ * one with react-markdown, and exports any/all to PDF via `markdownToPdf`.
+ */
 export function ResultsView({ documents, onStartOver }: ResultsViewProps) {
+  // Which of the four documents is shown in the main pane.
   const [selectedDoc, setSelectedDoc] = useState<keyof typeof documents>('riskProfile');
 
+  // Sidebar entries — keys match the `documents` object returned by the backend.
   const docList = [
     { key: 'riskProfile', title: 'Client Risk Profile', icon: FileText },
     { key: 'goalsBrief', title: 'Goals Brief', icon: FileText },
@@ -24,6 +31,7 @@ export function ResultsView({ documents, onStartOver }: ResultsViewProps) {
     { key: 'draftIPS', title: 'Draft IPS', icon: FileText },
   ] as const;
 
+  // Export a single document to a downloadable PDF (text-based, see markdownToPdf).
   const handleDownload = (docKey: keyof typeof documents, title: string) => {
     downloadMarkdownAsPdf(documents[docKey], title);
   };
@@ -115,6 +123,9 @@ export function ResultsView({ documents, onStartOver }: ResultsViewProps) {
 
               <div className="p-6">
                 <div className="max-w-none text-sm leading-relaxed text-foreground">
+                  {/* Render the Markdown to styled HTML. remark-gfm adds tables.
+                      Each element is overridden below to match the app's theme
+                      (the library ships no default styling of its own). */}
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{

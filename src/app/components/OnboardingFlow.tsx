@@ -10,8 +10,15 @@ interface OnboardingFlowProps {
   onComplete: (data: any, documents: any) => void;
 }
 
+/**
+ * The 5-step intake wizard. Owns the single `formData` object that every step
+ * reads from and writes into, plus the `currentStep` cursor. Each step is a
+ * self-contained form rendered one at a time; this component is the shell
+ * (header, progress bar, navigation) that swaps the active step in and out.
+ */
 export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  // One bucket per step; steps merge their answers into the matching key.
   const [formData, setFormData] = useState<any>({
     basicInfo: {},
     financial: {},
@@ -19,6 +26,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     goals: {},
   });
 
+  // Step registry — drives both the progress bar and which component renders.
   const steps = [
     { number: 1, title: 'Basic Information', component: BasicInformation },
     { number: 2, title: 'Financial Situation', component: FinancialSituation },
@@ -27,6 +35,8 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     { number: 5, title: 'Review & Generate', component: ReviewGenerate },
   ];
 
+  // A step finished: save its slice of data under the right key, then advance.
+  // (Step 5, Review & Generate, calls `onComplete` directly instead of `onNext`.)
   const handleStepComplete = (stepData: any) => {
     const stepKeys = ['basicInfo', 'financial', 'risk', 'goals'];
     const updatedData = {
@@ -46,6 +56,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
     }
   };
 
+  // The form component for the step currently in view.
   const CurrentStepComponent = steps[currentStep - 1].component;
 
   return (

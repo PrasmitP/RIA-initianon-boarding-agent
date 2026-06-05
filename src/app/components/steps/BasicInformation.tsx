@@ -7,14 +7,23 @@ interface BasicInformationProps {
   onBack: () => void;
 }
 
+/**
+ * Step 1 — client identity & demographics. First step, so there is no Back
+ * button. Local form state seeds from `data.basicInfo` so re-visiting the step
+ * preserves what was entered; on submit it bubbles up via `onNext`.
+ */
 export function BasicInformation({ data, onNext }: BasicInformationProps) {
-  const [formData, setFormData] = useState(data.basicInfo || {
+  // Merge (not `||`): the parent seeds `basicInfo` as `{}`, which is truthy, so a
+  // bare `||` fallback would leave every field `undefined` and the inputs
+  // uncontrolled. Spreading defaults first guarantees every field is a string.
+  const [formData, setFormData] = useState({
     clientName: '',
     age: '',
     email: '',
     phone: '',
     employmentStatus: '',
     maritalStatus: '',
+    ...data.basicInfo,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -26,6 +35,7 @@ export function BasicInformation({ data, onNext }: BasicInformationProps) {
     setFormData({ ...formData, [field]: value });
   };
 
+  // Name, age, and email are required to continue; the rest are optional.
   const isValid = formData.clientName && formData.age && formData.email;
 
   return (

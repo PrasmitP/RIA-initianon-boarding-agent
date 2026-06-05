@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, ArrowLeft, Plus, X } from 'lucide-react';
+import { formatThousands, toRawDigits } from '../../lib/money';
 
 interface Goal {
   id: string;
@@ -15,7 +16,14 @@ interface GoalsObjectivesProps {
   onBack: () => void;
 }
 
+/**
+ * Step 4 — retirement targets plus a dynamic, repeatable list of financial
+ * goals (add/remove rows). Unlike the other steps it keeps the goal array and
+ * the two retirement fields as separate pieces of state, then assembles them
+ * into one object on submit.
+ */
 export function GoalsObjectives({ data, onNext, onBack }: GoalsObjectivesProps) {
+  // Start with one blank goal row; the advisor can add or remove rows.
   const [goals, setGoals] = useState<Goal[]>(
     data.goals?.goals || [
       {
@@ -33,6 +41,7 @@ export function GoalsObjectives({ data, onNext, onBack }: GoalsObjectivesProps) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Drop empty rows before saving so blank goals never reach the prompts.
     onNext({
       goals: goals.filter((g) => g.description),
       retirementAge,
@@ -63,6 +72,7 @@ export function GoalsObjectives({ data, onNext, onBack }: GoalsObjectivesProps) 
     setGoals(goals.map((g) => (g.id === id ? { ...g, [field]: value } : g)));
   };
 
+  // Require at least one fully specified goal (description + amount) to continue.
   const hasValidGoal = goals.some((g) => g.description && g.targetAmount);
 
   return (
@@ -100,12 +110,12 @@ export function GoalsObjectives({ data, onNext, onBack }: GoalsObjectivesProps) 
                   </span>
                   <input
                     id="retirementIncome"
-                    type="number"
-                    min="0"
-                    value={retirementIncome}
-                    onChange={(e) => setRetirementIncome(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatThousands(retirementIncome)}
+                    onChange={(e) => setRetirementIncome(toRawDigits(e.target.value))}
                     className="w-full pl-8 pr-4 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="80000"
+                    placeholder="80,000"
                   />
                 </div>
               </div>
@@ -165,12 +175,12 @@ export function GoalsObjectives({ data, onNext, onBack }: GoalsObjectivesProps) 
                             $
                           </span>
                           <input
-                            type="number"
-                            min="0"
-                            value={goal.targetAmount}
-                            onChange={(e) => updateGoal(goal.id, 'targetAmount', e.target.value)}
+                            type="text"
+                            inputMode="numeric"
+                            value={formatThousands(goal.targetAmount)}
+                            onChange={(e) => updateGoal(goal.id, 'targetAmount', toRawDigits(e.target.value))}
                             className="w-full pl-8 pr-4 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
-                            placeholder="50000"
+                            placeholder="50,000"
                           />
                         </div>
                       </div>

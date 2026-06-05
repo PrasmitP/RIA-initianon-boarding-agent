@@ -7,6 +7,9 @@ interface RiskAssessmentProps {
   onBack: () => void;
 }
 
+// Risk questionnaire. Each option carries a 1–4 score; the four answers are
+// averaged into the client's risk score. Scores live next to the copy so the
+// scoring rubric is self-documenting and easy to tune.
 const questions = [
   {
     id: 'marketDecline',
@@ -51,16 +54,23 @@ const questions = [
 ];
 
 export function RiskAssessment({ data, onNext, onBack }: RiskAssessmentProps) {
-  const [formData, setFormData] = useState(data.risk || {
+  // Merge defaults so every answer is a defined string (the parent seeds `risk`
+  // as a truthy `{}`, which a bare `||` fallback would not replace).
+  const [formData, setFormData] = useState({
     marketDecline: '',
     investmentGoal: '',
     timeHorizon: '',
     riskTolerance: '',
+    ...data.risk,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Deterministic risk scoring — intentionally NOT an LLM call.
+    // Risk classification feeds compliance decisions, so it must be
+    // reproducible and explainable: plain arithmetic on the questionnaire.
+    // The model only later *describes* the resulting profile in prose.
     const scores = questions.map((q) => {
       const answer = formData[q.id];
       const option = q.options.find((o) => o.value === answer);
@@ -68,13 +78,15 @@ export function RiskAssessment({ data, onNext, onBack }: RiskAssessmentProps) {
     });
 
     const totalScore = scores.reduce((sum, score) => sum + score, 0);
-    const avgScore = totalScore / questions.length;
+    const avgScore = totalScore / questions.length; // 1.0 – 4.0
 
+    // Map the averaged score onto a labeled profile (thresholds at 1.5/2.5/3.5).
     let riskProfile = 'Conservative';
     if (avgScore >= 3.5) riskProfile = 'Aggressive';
     else if (avgScore >= 2.5) riskProfile = 'Growth';
     else if (avgScore >= 1.5) riskProfile = 'Moderate';
 
+    // Pass both the label and the raw score downstream; the prompts use both.
     onNext({ ...formData, riskProfile, riskScore: avgScore });
   };
 

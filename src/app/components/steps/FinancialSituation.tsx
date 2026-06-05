@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
+import { formatThousands, toRawDigits } from '../../lib/money';
 
 interface FinancialSituationProps {
   data: any;
@@ -7,14 +8,22 @@ interface FinancialSituationProps {
   onBack: () => void;
 }
 
+/**
+ * Step 2 — the client's financial picture (income, assets, liabilities,
+ * experience). Same controlled-form pattern as the other steps: seed from
+ * `data.financial`, edit locally, push up on submit.
+ */
 export function FinancialSituation({ data, onNext, onBack }: FinancialSituationProps) {
-  const [formData, setFormData] = useState(data.financial || {
+  // Merge defaults so every field is a defined string (the parent seeds
+  // `financial` as a truthy `{}`, which a bare `||` fallback would not replace).
+  const [formData, setFormData] = useState({
     annualIncome: '',
     totalAssets: '',
     liquidAssets: '',
     liabilities: '',
     investmentExperience: '',
     currentInvestments: '',
+    ...data.financial,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -26,6 +35,7 @@ export function FinancialSituation({ data, onNext, onBack }: FinancialSituationP
     setFormData({ ...formData, [field]: value });
   };
 
+  // Income and total assets are the minimum needed to draft documents.
   const isValid = formData.annualIncome && formData.totalAssets;
 
   return (
@@ -45,13 +55,13 @@ export function FinancialSituation({ data, onNext, onBack }: FinancialSituationP
                 </span>
                 <input
                   id="annualIncome"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
-                  min="0"
-                  value={formData.annualIncome}
-                  onChange={(e) => handleChange('annualIncome', e.target.value)}
+                  value={formatThousands(formData.annualIncome)}
+                  onChange={(e) => handleChange('annualIncome', toRawDigits(e.target.value))}
                   className="w-full pl-8 pr-4 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="150000"
+                  placeholder="150,000"
                 />
               </div>
             </div>
@@ -66,13 +76,13 @@ export function FinancialSituation({ data, onNext, onBack }: FinancialSituationP
                 </span>
                 <input
                   id="totalAssets"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   required
-                  min="0"
-                  value={formData.totalAssets}
-                  onChange={(e) => handleChange('totalAssets', e.target.value)}
+                  value={formatThousands(formData.totalAssets)}
+                  onChange={(e) => handleChange('totalAssets', toRawDigits(e.target.value))}
                   className="w-full pl-8 pr-4 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="500000"
+                  placeholder="500,000"
                 />
               </div>
             </div>
@@ -89,12 +99,12 @@ export function FinancialSituation({ data, onNext, onBack }: FinancialSituationP
                 </span>
                 <input
                   id="liquidAssets"
-                  type="number"
-                  min="0"
-                  value={formData.liquidAssets}
-                  onChange={(e) => handleChange('liquidAssets', e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatThousands(formData.liquidAssets)}
+                  onChange={(e) => handleChange('liquidAssets', toRawDigits(e.target.value))}
                   className="w-full pl-8 pr-4 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="100000"
+                  placeholder="100,000"
                 />
               </div>
             </div>
@@ -109,12 +119,12 @@ export function FinancialSituation({ data, onNext, onBack }: FinancialSituationP
                 </span>
                 <input
                   id="liabilities"
-                  type="number"
-                  min="0"
-                  value={formData.liabilities}
-                  onChange={(e) => handleChange('liabilities', e.target.value)}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatThousands(formData.liabilities)}
+                  onChange={(e) => handleChange('liabilities', toRawDigits(e.target.value))}
                   className="w-full pl-8 pr-4 py-2.5 bg-input-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="200000"
+                  placeholder="200,000"
                 />
               </div>
             </div>

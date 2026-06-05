@@ -8,6 +8,12 @@ interface ReviewGenerateProps {
   onComplete: (data: any, documents: any) => void;
 }
 
+/**
+ * Final wizard step: shows a read-only summary of everything collected, then
+ * fires the one and only network call in the app. This is the client side of
+ * the trust boundary — it sends the full `formData` to the Supabase edge
+ * function, which holds the Anthropic key and generates the documents.
+ */
 export function ReviewGenerate({ data, onBack, onComplete }: ReviewGenerateProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +23,9 @@ export function ReviewGenerate({ data, onBack, onComplete }: ReviewGenerateProps
     setError(null);
 
     try {
+      // POST the whole intake to the edge function. The bearer token is the
+      // public Supabase anon key — safe to ship in client code by design; it
+      // identifies the project, it is NOT the Anthropic key.
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-45e67790/generate-documents`,
         {
@@ -34,6 +43,8 @@ export function ReviewGenerate({ data, onBack, onComplete }: ReviewGenerateProps
         throw new Error(errorData.error || 'Failed to generate documents');
       }
 
+      // Success: { riskProfile, goalsBrief, planningAgenda, draftIPS }.
+      // Hand both the inputs and the generated docs up to App → ResultsView.
       const documents = await response.json();
       setIsGenerating(false);
       onComplete(data, documents);

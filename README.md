@@ -131,6 +131,33 @@ The deployed Supabase function powers document generation out of the box. To run
 or modify the backend yourself, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
 for deploy steps and the secret it requires (`ANTHROPIC_API_KEY`).
 
+## Deployment
+
+Xylo ships as **two independent pieces**, deliberately split so the API key never
+reaches the client:
+
+- **Frontend** → **Vercel** (static Vite build). Holds **no secrets** — needs no
+  environment variables.
+- **Backend** → **Supabase Edge Function** (Deno). Holds the `ANTHROPIC_API_KEY`
+  as an encrypted secret; only this server-side code can read it.
+
+```bash
+# Backend (Supabase) — deploy the function + set the secret
+npx supabase link --project-ref <your-project-ref>
+npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+npx supabase functions deploy make-server-45e67790 --project-ref <your-project-ref>
+
+# Frontend (Vercel) — from the project root
+npx vercel            # preview deploy (accept the auto-detected Vite settings)
+npx vercel --prod     # production
+```
+
+Because the key lives only on Supabase, **no environment variables are set on
+Vercel** — a smaller attack surface. The remaining hardening (Anthropic spend
+limit, locking CORS to your domain) plus full step-by-step instructions,
+GitHub auto-deploy, and troubleshooting are in the
+**[Deployment section of docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#deployment)**.
+
 ## Roadmap
 
 The current build proves the core loop (intake → AI generation → review →
@@ -155,3 +182,75 @@ End-to-end delivery of a domain-specific AI product: real workflow modeling, a
 deployed serverless AI backend, sound secret handling, measurable cost
 engineering, and the kind of hands-on debugging and iteration a Forward Deployed
 Engineer does alongside a customer.
+
+## If I Had More Time
+
+This build deliberately proves the core loop end-to-end. With more runway, here's
+where I'd take it to make it a real product an RIA firm could adopt — roughly in
+the order I'd build them.
+
+### 1. A persistent client database (the biggest gap)
+
+Right now a generated document set lives only in the browser session — close the tab and it's gone. The first thing I'd add is **persistence** so that once a client's information is entered and their documents are generated, everything is saved and retrievable later :
+
+- **Schema (Supabase Postgres):**
+  - `firms` (the practice / tenant)
+  - `advisors` (users, belong to a firm)
+  - `clients` (the intake profile: basic info, financials, risk score, goals)
+  - `documents` (each generated doc: type, markdown content, the **exact inputs
+    and model** used to produce it, `created_at`, `version`)
+- **Advisor dashboard:** a searchable list of past clients — reopen a client to
+  view their saved profile and previously generated documents, no regeneration
+  needed (and no repeat API cost).
+- **Resume & re-generate:** edit a saved client's inputs and regenerate a single
+  document on demand.
+
+The plumbing is already half-there: the backend ships with a Supabase key-value
+store helper (`kv_store`) that's currently unused — persistence is the natural
+next wire-up.
+
+### 2. Advisor accounts & multi-tenancy
+
+Authentication (Supabase Auth) so each firm has its own private workspace, with
+**Row-Level Security** ensuring an advisor only ever sees their firm's clients.
+This also lets me re-enable `verify_jwt` and properly close the public endpoint —
+turning the current open demo into a access-controlled application.
+
+### 3. Compliance audit trail
+
+Because the IPS is a regulated artifact, I'd **version every document** and store
+a tamper-evident record of who generated what, from which inputs, with which
+model and prompt — so the firm is examination-ready and can prove how any client
+deliverable was produced.
+
+### 4. Output quality & evaluation
+
+- An **eval harness** scoring generated documents against a rubric (completeness,
+  required disclosures, tone) so prompt/model changes are measured, not guessed.
+- A **human-in-the-loop review** step: advisors edit drafts inline, and those
+  edits become few-shot examples that improve future generations for that firm.
+
+### 5. Firm-specific intelligence (RAG)
+
+Let each practice upload its own templates, model lineup, and allocation
+philosophy, and **retrieve** from them at generation time so output matches the
+firm's house style and compliance language — not a generic default.
+
+### 6. Integrations & delivery
+
+Push finished documents straight into the tools advisors already use — CRMs
+(Redtail, Wealthbox), custodians (Schwab, Fidelity), and **e-signature** — so the
+onboarding packet flows from intake to a signed IPS without leaving the app.
+
+### 7. Productionization
+
+Observability and cost dashboards (tokens/latency per firm), structured logging,
+per-firm rate limiting, automated tests in CI, and staged preview → production
+deploys. The groundwork is started — there's already a headless regression test
+for the PDF engine and a clean two-environment deploy split.
+
+> **Why these, in this order:** persistence and auth unlock everything else
+> (you can't have an audit trail or a firm workspace without stored data), and
+> they convert the current single-session demo into a multi-user SaaS. The later
+> items — evals, RAG, integrations — are what turn a working tool into something
+> a firm would pay for and trust with regulated work.

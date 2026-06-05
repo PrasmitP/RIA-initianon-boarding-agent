@@ -1,3 +1,9 @@
+// Supabase Edge Function (Deno runtime) — the app's only backend.
+//
+// This is the trust boundary: it is the single place the Anthropic API key is
+// read (server-side, from an encrypted secret) and the only thing that talks to
+// Claude. The browser never sees the key. Routes are prefixed with the function
+// slug `make-server-45e67790` because Supabase passes the full path through.
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -25,11 +31,14 @@ app.get("/make-server-45e67790/health", (c) => {
   return c.json({ status: "ok" });
 });
 
-// Generate documents endpoint
+// Generate documents endpoint — the core of the service.
+// Receives the full intake form and returns four generated advisory documents.
 app.post("/make-server-45e67790/generate-documents", async (c) => {
   try {
     const formData = await c.req.json();
 
+    // The Anthropic key is read here and ONLY here, from a Supabase secret.
+    // It is never bundled into the client, logged, or returned.
     const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
     if (!apiKey) {
       return c.json({ error: 'ANTHROPIC_API_KEY is not set on the server' }, 500);
@@ -37,7 +46,8 @@ app.post("/make-server-45e67790/generate-documents", async (c) => {
 
     const anthropic = new Anthropic({ apiKey });
 
-    // Generate all 4 documents in parallel
+    // Fan-out: each document is an independent Claude call, so run all four
+    // concurrently. Wall-clock latency is the slowest single call, not the sum.
     const [riskProfile, goalsBrief, planningAgenda, draftIPS] = await Promise.all([
       generateDocument(anthropic, 'risk-profile', formData),
       generateDocument(anthropic, 'goals-brief', formData),
@@ -57,6 +67,10 @@ app.post("/make-server-45e67790/generate-documents", async (c) => {
   }
 });
 
+// Generates one document. The only thing that varies per document type is the
+// prompt; the model, system instruction, and token budget are shared below.
+// Each prompt interpolates the client profile and enumerates the exact sections
+// the document must contain, and asks for Markdown so it renders and exports cleanly.
 async function generateDocument(
   anthropic: Anthropic,
   docType: string,
@@ -169,8 +183,13 @@ Format in markdown.`,
   };
 
   const message = await anthropic.messages.create({
+    // Haiku: the task is templated drafting from structured data, not open-ended
+    // reasoning. It's the fastest/cheapest tier — which matters at 4 calls each run.
     model: 'claude-haiku-4-5-20251001',
+    // 1200 is a hard ceiling well above the ~350-word target, so nothing truncates.
+    // Lowering it from 4000 (plus the brevity system prompt) cut output cost ~80%.
     max_tokens: 1200,
+    // Shared brevity steer — the main lever for keeping documents dense and cheap.
     system:
       'You generate concise professional financial advisory documents. ' +
       'Be brief and information-dense: use short bullet points and compact tables, ' +
@@ -184,7 +203,9 @@ Format in markdown.`,
     ],
   });
 
+  // Return the generated Markdown (or empty string if the model returned no text block).
   return message.content[0].type === 'text' ? message.content[0].text : '';
 }
 
+// Boot the Deno HTTP server with the Hono app as the request handler.
 Deno.serve(app.fetch);
