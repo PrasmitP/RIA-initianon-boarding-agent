@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { FileText, Download, RotateCcw, CheckCircle } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { downloadMarkdownAsPdf } from '../lib/markdownToPdf';
 
 interface ResultsViewProps {
   documents: {
@@ -22,14 +25,7 @@ export function ResultsView({ documents, onStartOver }: ResultsViewProps) {
   ] as const;
 
   const handleDownload = (docKey: keyof typeof documents, title: string) => {
-    const content = documents[docKey];
-    const blob = new Blob([content], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.replace(/\s+/g, '_')}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadMarkdownAsPdf(documents[docKey], title);
   };
 
   return (
@@ -118,10 +114,64 @@ export function ResultsView({ documents, onStartOver }: ResultsViewProps) {
               </div>
 
               <div className="p-6">
-                <div className="prose prose-sm max-w-none">
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
+                <div className="max-w-none text-sm leading-relaxed text-foreground">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      h1: ({ children }) => (
+                        <h1 className="text-2xl font-semibold mt-6 mb-4 first:mt-0">{children}</h1>
+                      ),
+                      h2: ({ children }) => (
+                        <h2 className="text-xl font-semibold mt-6 mb-3 pb-2 border-b border-border">{children}</h2>
+                      ),
+                      h3: ({ children }) => (
+                        <h3 className="text-lg font-semibold mt-5 mb-2">{children}</h3>
+                      ),
+                      h4: ({ children }) => (
+                        <h4 className="text-base font-semibold mt-4 mb-2">{children}</h4>
+                      ),
+                      p: ({ children }) => <p className="mb-4">{children}</p>,
+                      ul: ({ children }) => (
+                        <ul className="list-disc pl-6 mb-4 space-y-1">{children}</ul>
+                      ),
+                      ol: ({ children }) => (
+                        <ol className="list-decimal pl-6 mb-4 space-y-1">{children}</ol>
+                      ),
+                      li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                      strong: ({ children }) => (
+                        <strong className="font-semibold text-foreground">{children}</strong>
+                      ),
+                      em: ({ children }) => <em className="italic">{children}</em>,
+                      hr: () => <hr className="my-6 border-border" />,
+                      blockquote: ({ children }) => (
+                        <blockquote className="border-l-4 border-primary/30 pl-4 italic text-muted-foreground my-4">
+                          {children}
+                        </blockquote>
+                      ),
+                      a: ({ children, href }) => (
+                        <a href={href} className="text-primary underline" target="_blank" rel="noreferrer">
+                          {children}
+                        </a>
+                      ),
+                      code: ({ children }) => (
+                        <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
+                      ),
+                      table: ({ children }) => (
+                        <div className="overflow-x-auto my-4">
+                          <table className="w-full border-collapse text-sm">{children}</table>
+                        </div>
+                      ),
+                      thead: ({ children }) => <thead className="bg-muted">{children}</thead>,
+                      th: ({ children }) => (
+                        <th className="border border-border px-3 py-2 text-left font-semibold">{children}</th>
+                      ),
+                      td: ({ children }) => (
+                        <td className="border border-border px-3 py-2 align-top">{children}</td>
+                      ),
+                    }}
+                  >
                     {documents[selectedDoc]}
-                  </pre>
+                  </ReactMarkdown>
                 </div>
               </div>
             </div>

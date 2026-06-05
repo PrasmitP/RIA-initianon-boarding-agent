@@ -1,0 +1,4 @@
+project_id = "ria-onboarding-agent"
+
+[functions.make-server-45e67790]
+verify_jwt = false
